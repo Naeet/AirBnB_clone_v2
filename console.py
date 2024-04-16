@@ -2,6 +2,7 @@
 """ Console Module """
 import cmd
 import sys
+import re
 from models.base_model import BaseModel
 from models.__init__ import storage
 from models.user import User
@@ -19,16 +20,16 @@ class HBNBCommand(cmd.Cmd):
     prompt = '(hbnb) ' if sys.__stdin__.isatty() else ''
 
     classes = {
-               'BaseModel': BaseModel, 'User': User, 'Place': Place,
-               'State': State, 'City': City, 'Amenity': Amenity,
-               'Review': Review
-              }
+        'BaseModel': BaseModel, 'User': User, 'Place': Place,
+        'State': State, 'City': City, 'Amenity': Amenity,
+        'Review': Review
+    }
     dot_cmds = ['all', 'count', 'show', 'destroy', 'update']
     types = {
-             'number_rooms': int, 'number_bathrooms': int,
-             'max_guest': int, 'price_by_night': int,
-             'latitude': float, 'longitude': float
-            }
+        'number_rooms': int, 'number_bathrooms': int,
+        'max_guest': int, 'price_by_night': int,
+        'latitude': float, 'longitude': float
+    }
 
     def preloop(self):
         """Prints if isatty is false"""
@@ -113,39 +114,78 @@ class HBNBCommand(cmd.Cmd):
         """ Overrides the emptyline method of CMD """
         pass
 
-    def do_create(self, args):
-        """ Create an object of any class"""
-        try:
-            class_name = args.split(" ")[0]
-        except IndexError:
-            pass
-        if not class_name:
+    def do_create(self, arg):
+        """ Create an object of any class
+        if not args:
             print("** class name missing **")
             return
-        elif class_name not in HBNBCommand.classes:
+        args = args.split()
+        if args[0] not in HBNBCommand.classes:
             print("** class doesn't exist **")
             return
-        all_list = args.split(" ")
+        new_instance = eval(args[0])()
 
-        new_instance = eval(class_name)()
-
-        for i in range(1, len(all_list)):
-            key, value = tuple(all_list[i].split("="))
-            if value.startswith('"'):
-                value = value.strip('"').replace("_", " ")
+        for f in args[1:]:
+            key = f.split("=")[0]
+            value = f.split("=")[1]
+            if ('_' in value):
+                value = value.replace("_", " ")
+            if ('"' in value):
+                value = value.strip('"')
+            elif ('.' in value):
+                value = float(value)
             else:
-                try:
-                    value = eval(value)
-                except Exception:
-                    print(f"** cant evaluate {value}")
-                    pass
+                value = int(value)
 
-            if hasattr(new_instance, key):
-                setattr(new_instance, key, value)
-
+        setattr(new_instance, key, value)
+        storage.save()
         storage.new(new_instance)
         print(new_instance.id)
-        new_instance.save()
+        storage.save()"""
+        args = arg.split(' ')
+        if not arg:
+            print("** class name missing **")
+            return
+        elif args[0] not in HBNBCommand.classes:
+            print("** class doesn't exist **")
+            return
+        new_instance = HBNBCommand.classes[args[0]]()
+        # obj_dict = storage.all()
+        obj_dict = {}
+        # get classname and id in this repr <BaseModel.id>
+        clsName_id = "{}.{}".format(args[0], new_instance.id)
+        # obj = obj_dict[clsName_id]
+        obj_dict[clsName_id] = new_instance
+        # dictObj = new_instance.to_dict()
+        dictObj = new_instance.__dict__
+        # dictObj = obj.__dict__
+        if len(args) >= 2:
+            for arg in args:
+                if re.search(r'[=]', arg):
+                    param = arg.split('=')  # <key>=<value>
+                    value = param[1]
+                    if value[:1] == '"' and value[-1:] == '"':
+                        param[1] = param[1].strip('"')
+                        if '"' in param[1]:
+                            param[1] = param[1].replace('"', '\\')
+                        param[1] = str(param[1])
+                        if '_' in value:
+                            param[1] = param[1].replace('_', ' ')
+                    elif '.' in value:
+                        param[1] = float(value)
+                    elif param[1][:1] == '0':
+                        param[1] = str(param[1])
+                    else:
+                        param[1] = int(param[1])
+                    # obj_dict[param[0]] = param[1]
+                    dictObj[param[0]] = param[1]
+
+        # models.storage.new(self)
+        storage.save()
+        storage.new(new_instance)
+        print(new_instance.id)
+        # print(obj_dict)
+        storage.save()
 
     def help_create(self):
         """ Help information for the create method """
@@ -225,15 +265,14 @@ class HBNBCommand(cmd.Cmd):
         if args:
             args = args.split(' ')[0]  # remove possible trailing args
             if args not in HBNBCommand.classes:
-                print("** class doesn't exist **")
                 return
-            for k, v in storage._FileStorage__objects.items():
+            for k, v in storage.all().items():
                 if k.split('.')[0] == args:
                     print_list.append(str(v))
-        else:
-            for k, v in storage._FileStorage__objects.items():
-                print_list.append(str(v))
 
+        else:
+            for k, v in storage.all().items():
+                print_list.append(str(v))
         print(print_list)
 
     def help_all(self):
@@ -244,6 +283,7 @@ class HBNBCommand(cmd.Cmd):
     def do_count(self, args):
         """Count current number of class instances"""
         count = 0
+        # for k, v in storage.all().items():
         for k, v in storage._FileStorage__objects.items():
             if args == k.split('.')[0]:
                 count += 1
@@ -340,6 +380,7 @@ class HBNBCommand(cmd.Cmd):
         """ Help information for the update class """
         print("Updates an object with new information")
         print("Usage: update <className> <id> <attName> <attVal>\n")
+
 
 if __name__ == "__main__":
     HBNBCommand().cmdloop()
